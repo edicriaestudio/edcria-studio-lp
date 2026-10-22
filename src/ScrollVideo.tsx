@@ -43,7 +43,7 @@ export default function ScrollVideo() {
 
       const cw = window.innerWidth;
       const ch = window.innerHeight;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
       const targetW = Math.round(cw * dpr);
       const targetH = Math.round(ch * dpr);
@@ -72,18 +72,17 @@ export default function ScrollVideo() {
     []
   );
 
-  // Extracao de frames protegida: APENAS EM DESKTOP para economizar 100% da memoria no Mobile
+  // Extração de frames apenas no Desktop para carregamento ultra-rápido no mobile
   const extractFrames = useCallback(async () => {
     try {
       const isMobile = window.innerWidth < 768;
-      // No Mobile, NAO cria bitmaps na memoria RAM para o navegador nao fechar por falta de memoria (Out-of-Memory)
       if (isMobile) {
         setVideoVisible(true);
         setPosterVisible(false);
         return;
       }
 
-      const maxFrames = 60;
+      const maxFrames = 50;
       const maxWidth = 960;
 
       const offscreen = document.createElement('video');
@@ -101,7 +100,7 @@ export default function ScrollVideo() {
 
       const dur = offscreen.duration || 5;
       durationRef.current = dur;
-      const frameCount = Math.min(maxFrames, Math.max(20, Math.floor(dur * 12)));
+      const frameCount = Math.min(maxFrames, Math.max(20, Math.floor(dur * 10)));
       const frames: ImageBitmap[] = [];
 
       const vw = offscreen.videoWidth || 1280;
@@ -142,7 +141,7 @@ export default function ScrollVideo() {
     }
   }, []);
 
-  // Loop de animacao otimizado
+  // Loop de animação suave
   useEffect(() => {
     let running = true;
     updateScrollProgress();
@@ -188,7 +187,7 @@ export default function ScrollVideo() {
     };
   }, [updateScrollProgress, drawFrame]);
 
-  // Carrega o video com fallback seguro
+  // Carrega vídeo leve
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -198,11 +197,13 @@ export default function ScrollVideo() {
       setVideoVisible(true);
       setPosterVisible(false);
 
-      const timer = setTimeout(() => {
-        extractFrames();
-      }, 200);
-
-      return () => clearTimeout(timer);
+      const isMobile = window.innerWidth < 768;
+      if (!isMobile) {
+        const timer = setTimeout(() => {
+          extractFrames();
+        }, 300);
+        return () => clearTimeout(timer);
+      }
     };
 
     video.addEventListener('loadeddata', onLoaded, { once: true });
@@ -234,7 +235,7 @@ export default function ScrollVideo() {
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-[#080808] pointer-events-none transform-gpu">
-      {/* Layer 1: Poster estatico super leve */}
+      {/* Layer 1: Poster estático super leve */}
       <img
         ref={posterRef}
         src="/figma/portfolio-hero-cover.webp"
@@ -243,7 +244,7 @@ export default function ScrollVideo() {
         style={{ opacity: posterVisible ? 1 : 0 }}
       />
 
-      {/* Layer 2: Video de fundo leve */}
+      {/* Layer 2: Vídeo de fundo com carregamento diferido */}
       <video
         ref={videoRef}
         src={VIDEO_URL}
@@ -251,8 +252,6 @@ export default function ScrollVideo() {
         autoPlay
         loop
         playsInline
-        webkit-playsinline="true"
-        x5-video-player-type="h5"
         preload="metadata"
         className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
         style={{ opacity: videoVisible && !canvasVisible ? 1 : 0 }}
