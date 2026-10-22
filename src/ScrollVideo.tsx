@@ -15,14 +15,13 @@ export default function ScrollVideo() {
   const durationRef = useRef(0);
   const targetProgress = useRef(0);
 
-  // Cached canvas dimensions to avoid layout thrashing
   const cachedDims = useRef({ w: 0, h: 0, dpr: 1 });
 
   const [posterVisible, setPosterVisible] = useState(true);
   const [videoVisible, setVideoVisible] = useState(false);
   const [canvasVisible, setCanvasVisible] = useState(false);
 
-  // Calculate scroll progress accurately across mobile and desktop
+  // Calcula o progresso do scroll de forma ultra-leve
   const updateScrollProgress = useCallback(() => {
     const scrollH = document.documentElement.scrollHeight || document.body.scrollHeight;
     const innerH = window.innerHeight || document.documentElement.clientHeight;
@@ -35,7 +34,6 @@ export default function ScrollVideo() {
     targetProgress.current = progress;
   }, []);
 
-  // Draw a frame on canvas with object-cover math and cached dimensions
   const drawFrame = useCallback(
     (source: ImageBitmap | HTMLVideoElement | HTMLCanvasElement) => {
       const canvas = canvasRef.current;
@@ -50,12 +48,11 @@ export default function ScrollVideo() {
       const targetW = Math.round(cw * dpr);
       const targetH = Math.round(ch * dpr);
 
-      // Only resize canvas backing buffer when dimensions genuinely change
       if (cachedDims.current.w !== targetW || cachedDims.current.h !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
-        canvas.style.width = `${cw}px`;
-        canvas.style.height = `${ch}px`;
+        canvas.style.width = cw + 'px';
+        canvas.style.height = ch + 'px';
         cachedDims.current = { w: targetW, h: targetH, dpr };
       }
 
@@ -64,7 +61,6 @@ export default function ScrollVideo() {
 
       if (!sw || !sh) return;
 
-      // Object-cover: scale to fill viewport, center crop
       const scale = Math.max(targetW / sw, targetH / sh);
       const dw = sw * scale;
       const dh = sh * scale;
@@ -76,14 +72,19 @@ export default function ScrollVideo() {
     []
   );
 
-  // Extract frames adaptively for mobile (lighter & faster) and desktop (full fidelity)
+  // Extracao de frames protegida: APENAS EM DESKTOP para economizar 100% da memoria no Mobile
   const extractFrames = useCallback(async () => {
     try {
       const isMobile = window.innerWidth < 768;
-      // Mobile: 45 frames @ 480px width (ultra fast ~200ms load, ~80% memory reduction)
-      // Desktop: 75 frames @ 960px width
-      const maxFrames = isMobile ? 45 : 75;
-      const maxWidth = isMobile ? 480 : 960;
+      // No Mobile, NAO cria bitmaps na memoria RAM para o navegador nao fechar por falta de memoria (Out-of-Memory)
+      if (isMobile) {
+        setVideoVisible(true);
+        setPosterVisible(false);
+        return;
+      }
+
+      const maxFrames = 60;
+      const maxWidth = 960;
 
       const offscreen = document.createElement('video');
       offscreen.src = VIDEO_URL;
@@ -100,7 +101,7 @@ export default function ScrollVideo() {
 
       const dur = offscreen.duration || 5;
       durationRef.current = dur;
-      const frameCount = Math.min(maxFrames, Math.max(20, Math.floor(dur * (isMobile ? 10 : 16))));
+      const frameCount = Math.min(maxFrames, Math.max(20, Math.floor(dur * 12)));
       const frames: ImageBitmap[] = [];
 
       const vw = offscreen.videoWidth || 1280;
@@ -135,13 +136,13 @@ export default function ScrollVideo() {
         setVideoVisible(false);
       }
     } catch (e) {
-      console.warn('Offscreen frame extraction fallback to direct video scrubbing:', e);
+      console.warn('ScrollVideo fallback ativo:', e);
       setVideoVisible(true);
       setPosterVisible(false);
     }
   }, []);
 
-  // High-performance RAF scroll animation loop
+  // Loop de animacao otimizado
   useEffect(() => {
     let running = true;
     updateScrollProgress();
@@ -150,7 +151,6 @@ export default function ScrollVideo() {
       if (!running) return;
 
       const target = targetProgress.current;
-      // Responsive lerp: fast response to finger touch scroll
       const lerpSpeed = 0.16;
       smoothed.current += (target - smoothed.current) * lerpSpeed;
 
@@ -161,9 +161,8 @@ export default function ScrollVideo() {
         );
         drawFrame(framesRef.current[idx]);
       } else if (videoRef.current && durationRef.current > 0) {
-        // Fallback: direct video scrub
         const seekTime = smoothed.current * (durationRef.current - 0.05);
-        if (Math.abs(seekTime - lastSeek.current) > 0.03) {
+        if (Math.abs(seekTime - lastSeek.current) > 0.04) {
           videoRef.current.currentTime = Math.max(0, seekTime);
           lastSeek.current = seekTime;
         }
@@ -174,7 +173,6 @@ export default function ScrollVideo() {
 
     const animId = requestAnimationFrame(loop);
 
-    // Passive scroll listener for instant touch reaction on mobile
     const handleScroll = () => {
       updateScrollProgress();
     };
@@ -190,7 +188,7 @@ export default function ScrollVideo() {
     };
   }, [updateScrollProgress, drawFrame]);
 
-  // Load video and initialize frame engine
+  // Carrega o video com fallback seguro
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -200,10 +198,9 @@ export default function ScrollVideo() {
       setVideoVisible(true);
       setPosterVisible(false);
 
-      // Rapid initialization
       const timer = setTimeout(() => {
         extractFrames();
-      }, 150);
+      }, 200);
 
       return () => clearTimeout(timer);
     };
@@ -216,7 +213,6 @@ export default function ScrollVideo() {
     };
   }, [extractFrames]);
 
-  // Resize handler
   useEffect(() => {
     const handleResize = () => {
       updateScrollProgress();
@@ -238,7 +234,7 @@ export default function ScrollVideo() {
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-[#080808] pointer-events-none transform-gpu">
-      {/* Layer 1: Poster */}
+      {/* Layer 1: Poster estatico super leve */}
       <img
         ref={posterRef}
         src="/figma/portfolio-hero-cover.webp"
@@ -247,30 +243,29 @@ export default function ScrollVideo() {
         style={{ opacity: posterVisible ? 1 : 0 }}
       />
 
-      {/* Layer 2: Video (hardware-accelerated fallback seek for mobile & desktop) */}
+      {/* Layer 2: Video de fundo leve */}
       <video
         ref={videoRef}
         src={VIDEO_URL}
         muted
         autoPlay
+        loop
         playsInline
         webkit-playsinline="true"
         x5-video-player-type="h5"
-        preload="auto"
+        preload="metadata"
         className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
         style={{ opacity: videoVisible && !canvasVisible ? 1 : 0 }}
       />
 
-      {/* Layer 3: Canvas (60 FPS scroll-scrubbed frames) */}
+      {/* Layer 3: Canvas (Desktop 60 FPS) */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 h-full w-full transition-opacity duration-700"
         style={{ opacity: canvasVisible ? 1 : 0 }}
       />
 
-      {/* Subtle Dark Vignette & Mesh Overlay for optimal contrast on mobile */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#080808]/70 via-transparent to-[#080808]/85 pointer-events-none" />
     </div>
   );
 }
-
