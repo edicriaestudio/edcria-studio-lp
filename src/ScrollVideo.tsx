@@ -11,8 +11,6 @@ export default function ScrollVideo() {
   const framesRef = useRef<ImageBitmap[]>([]);
   const framesReady = useRef(false);
   const smoothed = useRef(0);
-  const lastSeek = useRef(0);
-  const durationRef = useRef(0);
   const targetProgress = useRef(0);
 
   const cachedDims = useRef({ w: 0, h: 0, dpr: 1 });
@@ -72,15 +70,11 @@ export default function ScrollVideo() {
     []
   );
 
-  // Extração de frames apenas no Desktop para carregamento ultra-rápido no mobile
+  // Extração de frames apenas no Desktop
   const extractFrames = useCallback(async () => {
     try {
       const isMobile = window.innerWidth < 768;
-      if (isMobile) {
-        setVideoVisible(true);
-        setPosterVisible(false);
-        return;
-      }
+      if (isMobile) return;
 
       const maxFrames = 50;
       const maxWidth = 960;
@@ -99,7 +93,6 @@ export default function ScrollVideo() {
       });
 
       const dur = offscreen.duration || 5;
-      durationRef.current = dur;
       const frameCount = Math.min(maxFrames, Math.max(20, Math.floor(dur * 10)));
       const frames: ImageBitmap[] = [];
 
@@ -141,7 +134,7 @@ export default function ScrollVideo() {
     }
   }, []);
 
-  // Loop de animação suave
+  // Loop de animação suave e 100% passivo
   useEffect(() => {
     let running = true;
     updateScrollProgress();
@@ -153,19 +146,15 @@ export default function ScrollVideo() {
       const lerpSpeed = 0.16;
       smoothed.current += (target - smoothed.current) * lerpSpeed;
 
+      // No Desktop: usa frames pré-computados
       if (framesReady.current && framesRef.current.length > 0) {
         const idx = Math.min(
           framesRef.current.length - 1,
           Math.max(0, Math.round(smoothed.current * (framesRef.current.length - 1)))
         );
         drawFrame(framesRef.current[idx]);
-      } else if (videoRef.current && durationRef.current > 0) {
-        const seekTime = smoothed.current * (durationRef.current - 0.05);
-        if (Math.abs(seekTime - lastSeek.current) > 0.04) {
-          videoRef.current.currentTime = Math.max(0, seekTime);
-          lastSeek.current = seekTime;
-        }
       }
+      // No Mobile: o vídeo roda como background contínuo loop sem seek (0% CPU, 0 crash)
 
       requestAnimationFrame(loop);
     };
@@ -187,13 +176,12 @@ export default function ScrollVideo() {
     };
   }, [updateScrollProgress, drawFrame]);
 
-  // Carrega vídeo leve
+  // Carrega vídeo de forma leve
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const onLoaded = () => {
-      durationRef.current = video.duration || 5;
       setVideoVisible(true);
       setPosterVisible(false);
 
@@ -244,7 +232,7 @@ export default function ScrollVideo() {
         style={{ opacity: posterVisible ? 1 : 0 }}
       />
 
-      {/* Layer 2: Vídeo de fundo com carregamento diferido */}
+      {/* Layer 2: Vídeo de fundo com loop contínuo e aceleração de GPU */}
       <video
         ref={videoRef}
         src={VIDEO_URL}
@@ -252,7 +240,9 @@ export default function ScrollVideo() {
         autoPlay
         loop
         playsInline
-        preload="metadata"
+        webkit-playsinline="true"
+        x5-video-player-type="h5"
+        preload="auto"
         className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
         style={{ opacity: videoVisible && !canvasVisible ? 1 : 0 }}
       />

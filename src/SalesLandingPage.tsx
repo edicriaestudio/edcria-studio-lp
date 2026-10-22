@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRight,
@@ -172,6 +172,77 @@ const staggerContainer = {
     }
   }
 };
+
+
+interface LazyTemplateVideoProps {
+  item: typeof SHOWCASE_ITEMS[0];
+}
+
+function LazyTemplateVideo({ item }: LazyTemplateVideoProps) {
+  const [isActive, setIsActive] = useState(false);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = videoContainerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsActive(entry.isIntersecting);
+        });
+      },
+      { rootMargin: '120px 0px', threshold: 0.15 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={videoContainerRef} className="relative w-full aspect-[9/14] overflow-hidden bg-black/60 flex items-center justify-center">
+      {isActive ? (
+        <video
+          src={item.video}
+          poster={item.image}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 filter brightness-95 group-hover:brightness-100"
+        />
+      ) : (
+        <img
+          src={item.image}
+          alt={item.title}
+          loading="lazy"
+          className="w-full h-full object-cover object-center filter brightness-95"
+        />
+      )}
+      
+      <div className="absolute inset-0 bg-gradient-to-t from-[#050b11]/90 via-transparent to-transparent pointer-events-none" />
+      
+      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/80 border border-cyan-400/40 text-[9px] font-mono text-cyan-300 backdrop-blur-md uppercase tracking-wider">
+        {item.tag}
+      </div>
+      <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-cyan-950/80 border border-cyan-400/50 text-[9px] font-mono text-emerald-400 backdrop-blur-md flex items-center gap-1">
+        <Play size={9} className="fill-emerald-400" />
+        <span>VÍDEO AO VIVO</span>
+      </div>
+
+      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[10px] font-mono text-zinc-300">
+        <span className="px-2 py-0.5 rounded bg-black/70 border border-white/10 backdrop-blur-sm">
+          {item.metrics}
+        </span>
+        <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-black/75 border border-amber-400/30 backdrop-blur-sm text-amber-300">
+          <Star size={11} className="fill-amber-400 text-amber-400" />
+          <span className="font-bold text-white">{item.rating}</span>
+          <span className="text-[9px] text-zinc-400">({item.reviews})</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SalesLandingPage() {
   const [activeSegmentIdx, setActiveSegmentIdx] = useState(0);
@@ -579,40 +650,7 @@ export default function SalesLandingPage() {
               variants={fadeInUp}
               className="group rounded-3xl bg-cyan-950/15 border border-cyan-400/30 hover:border-cyan-400/70 backdrop-blur-3xl transition-all duration-500 overflow-hidden flex flex-col justify-between shadow-2xl hover:shadow-[0_0_40px_rgba(6,182,212,0.25)]"
             >
-              {/* FRAME VERTICAL (9:16) ESTILO CELULAR / STORIES */}
-              <div className="relative w-full aspect-[9/14] overflow-hidden bg-black/60 flex items-center justify-center">
-                <video
-                  src={item.video}
-                  poster={item.image}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 filter brightness-95 group-hover:brightness-100"
-                />
-                
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050b11]/90 via-transparent to-transparent pointer-events-none" />
-                
-                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/80 border border-cyan-400/40 text-[9px] font-mono text-cyan-300 backdrop-blur-md uppercase tracking-wider">
-                  {item.tag}
-                </div>
-                <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-cyan-950/80 border border-cyan-400/50 text-[9px] font-mono text-emerald-400 backdrop-blur-md flex items-center gap-1">
-                  <Play size={9} className="fill-emerald-400" />
-                  <span>VÍDEO AO VIVO</span>
-                </div>
-
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[10px] font-mono text-zinc-300">
-                  <span className="px-2 py-0.5 rounded bg-black/70 border border-white/10 backdrop-blur-sm">
-                    {item.metrics}
-                  </span>
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-black/75 border border-amber-400/30 backdrop-blur-sm text-amber-300">
-                    <Star size={11} className="fill-amber-400 text-amber-400" />
-                    <span className="font-bold text-white">{item.rating}</span>
-                    <span className="text-[9px] text-zinc-400">({item.reviews})</span>
-                  </div>
-                </div>
-              </div>
+              <LazyTemplateVideo item={item} />
 
               {/* Informações do Template */}
               <div className="p-5 space-y-2.5">
